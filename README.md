@@ -1,10 +1,11 @@
 # combinatorics.zig
 
-An (incomplete) port of Julia's [combinatorics library](https://github.com/JuliaMath/Combinatorics.jl) along with miscellaneous related tools.
+An incomplete port of Julia's [combinatorics library](https://github.com/JuliaMath/Combinatorics.jl) along with miscellaneous related tools.
 
 __WARNING__ This library is very immature, untested and may have bugs.  Use at your own risk.
 
-This library provides itertors over set permutations and combinations.  It also provides an [`NChooseK`](src/misc.zig) iterator.  Currently sets sizes are limited to either 63 or 127.  
+This library provides itertors over set permutations and combinations.  It also provides an [`NChooseK`](src/misc.zig) iterator.  Currently set sizes are limited to either 63 or 127.  
+
 
 # usage
 
@@ -22,7 +23,6 @@ This library provides itertors over set permutations and combinations.  It also 
 ### otherwise 
 
 copy relevent files from src/ into your project or `git submodule` the entire project.
-
 
 
 ## run tests
