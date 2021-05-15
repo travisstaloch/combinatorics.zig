@@ -17,14 +17,13 @@ pub fn NChooseK(comptime T: type) type {
         /// n: total number of elements in set
         /// k: number of elements to choose (number of set bits at any point after calling `next()`)
         pub fn init(n: T, k: T) !Self {
-            if (n == 0 or n > std.math.maxInt(TLog2) or k > std.math.maxInt(TLog2)) return error.ArgumentBounds;
+            if (n == 0 or n > std.math.maxInt(TLog2) or k > std.math.maxInt(TLog2) or k > n) return error.ArgumentBounds;
             const self = .{
                 .k = k,
                 .n = n,
                 .set = (@as(T, 1) << @intCast(TLog2, k)) - 1,
                 .limit = @as(T, 1) << @intCast(TLog2, n),
             };
-            // std.debug.print("k {} n {} set {}:{b} limit {}\n", .{ self.k, self.n, self.set, self.set, self.limit });
             return self;
         }
 
@@ -52,11 +51,9 @@ test "basic" {
         &.{ 0b011111, 0b101111, 0b110111, 0b111011, 0b111101, 0b111110 }, // 6,5
     };
     for (expecteds_bycount) |expecteds, count| {
-        // std.debug.print("count {}\n", .{count});
         var it = try NChooseK(usize).init(count + 2, count + 1);
         for (expecteds) |expected, i| {
             const actual = it.next().?;
-            // std.debug.print("actual {}:{b} expected {b}\n", .{ actual, actual, expected });
             try std.testing.expectEqual(expected, actual);
         }
         try std.testing.expectEqual(@as(?usize, null), it.next());
@@ -64,18 +61,16 @@ test "basic" {
 }
 
 test "edge cases" {
+    // n == 0
     try std.testing.expectError(error.ArgumentBounds, NChooseK(usize).init(0, 1));
+    // n too big
     try std.testing.expectError(error.ArgumentBounds, NChooseK(u8).init(8, 7));
+    // k > n
+    try std.testing.expectError(error.ArgumentBounds, NChooseK(usize).init(1, 2));
 
     const Ts = [_]type{ u3, u8, u16, u64, u65, u128 };
     inline for (Ts) |T| {
         var it = try NChooseK(T).init(std.math.log2_int(T, std.math.maxInt(T)), 1);
         while (it.next()) |x| try std.testing.expect(x > 0);
-    }
-
-    // k > n produces null
-    {
-        var it = try NChooseK(usize).init(1, 2);
-        try std.testing.expectEqual(@as(?usize, null), it.next());
     }
 }

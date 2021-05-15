@@ -9,16 +9,16 @@ This library provides itertors over set permutations and combinations.  It also 
 
 # usage
 
+
 ## get source 
 
 ### via [gyro](https://github.com/mattnite/gyro) package manager
 
-```console
-  gyro add --src github travisstaloch/combinatorics.zig
-```
-  - in build.zig
-    - `const pkgs = @import("gyro").pkgs;`
-    - `pkgs.addAllTo(exe/lib/tests);`
+- in console
+  - `$ gyro add --src github travisstaloch/combinatorics.zig`
+- in build.zig
+  - `const pkgs = @import("gyro").pkgs;`
+  - `pkgs.addAllTo(exe/lib/tests);`
 
 ### otherwise 
 
