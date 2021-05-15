@@ -13,17 +13,16 @@ This library provides itertors over set permutations and combinations.  It also 
 ### via [gyro](https://github.com/mattnite/gyro) package manager
 
 ```console
-gyro add --src github travisstaloch/combinatorics.zig
+  gyro add --src github travisstaloch/combinatorics.zig
 ```
-- in build.zig
+  - in build.zig
     - `const pkgs = @import("gyro").pkgs;`
     - `pkgs.addAllTo(exe/lib/tests);`
-
-
 
 ### otherwise 
 
 copy relevent files from src/ into your project or `git submodule` the entire project.
+
 
 
 ## run tests
@@ -37,8 +36,10 @@ Or with gyro
 gyro build test
 ```
 
+
 ## examples
 look at the tests in [permutations.zig](src/permutations.zig), [combinations.zig](src/combinations.zig) and [misc.zig](src/misc.zig).  Tests are usually found at the bottom of the files or directly after the thing they're testing.  
+
 
 # todo
 - export a c api

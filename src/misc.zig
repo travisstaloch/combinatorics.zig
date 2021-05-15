@@ -35,6 +35,7 @@ pub fn NChooseK(comptime T: type) type {
             if (self.set >= std.math.maxInt(TSigned)) return null;
             // compute next set value
             const c = self.set & @bitCast(T, -@bitCast(TSigned, self.set));
+            if (c == 0) return null;
             const r = self.set + c;
             self.set = @divFloor(((r ^ self.set) >> 2), c) | r;
             return if (result >= self.limit) null else result;
