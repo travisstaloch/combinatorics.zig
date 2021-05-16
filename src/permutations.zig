@@ -101,6 +101,7 @@ test "factorialBig" {
         try std.testing.expectEqual(fact_table128[fact_table_size_128 - 1], try f.to(u128));
     }
 
+
     // beyond table
     {
         const expected_factorials = .{
