@@ -72,22 +72,24 @@ fn factorialLookup(comptime T: type, n: anytype, table: anytype, limit: anytype)
 
 test "factorial" {
     inline for (.{
-        .{ i8, 5 },
-        .{ u8, 5 },
-        .{ i16, 7 },
-        .{ u16, 8 },
-        .{ i32, 12 },
-        .{ u32, 12 },
-        .{ i64, 20 },
-        .{ u64, 20 },
-        .{ isize, 20 },
-        .{ usize, 20 },
-        .{ i128, 33 },
-        .{ u128, 34 },
+        .{ i8, 5, 120 },
+        .{ u8, 5, 120 },
+        .{ i16, 7, 5040 },
+        .{ u16, 8, 40320 },
+        .{ i32, 12, 479001600 },
+        .{ u32, 12, 479001600 },
+        .{ i64, 20, 2432902008176640000 },
+        .{ u64, 20, 2432902008176640000 },
+        .{ isize, 20, 2432902008176640000 },
+        .{ usize, 20, 2432902008176640000 },
+        .{ i128, 33, 8683317618811886495518194401280000000 },
+        .{ u128, 34, 295232799039604140847618609643520000000 },
     }) |s| {
         const T = s[0];
         const max = s[1];
-        const f = try factorial(T, @as(usize, max));
+        const expected = s[2];
+        const actual = try factorial(T, @as(usize, max));
+        try std.testing.expectEqual(@as(T, expected), actual);
     }
 }
 
@@ -113,9 +115,9 @@ test "factorialBig" {
         .{ 45, 119622220865480194561963161495657715064383733760000000000 },
     };
 
-    inline for (expected_factorials) |n_expected_fact| {
-        const N = n_expected_fact[0];
-        const EXPECTED = n_expected_fact[1];
+    inline for (expected_factorials) |n_ex| {
+        const N = n_ex[0];
+        const EXPECTED = n_ex[1];
         var f = try factorialBig(N, std.testing.allocator);
         defer f.deinit();
         var expected = try bigint.Managed.initSet(std.testing.allocator, EXPECTED);
