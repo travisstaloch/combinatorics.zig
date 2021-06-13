@@ -36,7 +36,7 @@ fn factorial(comptime T: type, n: anytype) !T {
             factorialLookup(T, n, fact_table128, fact_table_size_128)
         else
             @compileError("factorial not implemented for integer type " ++ @typeName(T)),
-        else => @compileError("factorial not implemented for type " ++ @typeName(T)),
+        else => @compileError("factorial not implemented for non-integer type " ++ @typeName(T)),
     };
 }
 
@@ -64,6 +64,7 @@ fn factorialBig(n: anytype, allocator: *std.mem.Allocator) !bigint.Managed {
 fn factorialLookup(comptime T: type, n: anytype, table: anytype, limit: anytype) !T {
     if (n < 0) return error.Domain;
     if (n > limit) return error.Overflow;
+    if (n >= table.len) return error.OutOfBoundsAccess;
     const TI = @typeInfo(T);
     const TUnsigned = std.meta.Int(.unsigned, std.math.min(TI.Int.bits, 64));
     const f = table[@intCast(TUnsigned, n)];
@@ -101,7 +102,6 @@ test "factorialBig" {
         try std.testing.expectEqual(fact_table128[fact_table_size_128 - 1], try f.to(u128));
     }
 
-
     // beyond table
     {
         const expected_factorials = .{
@@ -131,7 +131,7 @@ test "factorialBig" {
 }
 
 /// for sets of length 35 and less
-pub fn nthperm(a: anytype, n: u6) !void {
+pub fn nthperm(a: anytype, n: u128) !void {
     if (a.len == 0) return;
 
     var f = try factorial(u128, a.len);
@@ -182,20 +182,31 @@ const expecteds: []const []const u8 = &.{
 };
 
 test "nthperm" {
-    const init = "ABCA";
-    var buf: [4]u8 = undefined;
+    {
+        const init = "ABCA";
+        var buf = init.*;
 
-    for (expecteds) |expected, i| {
-        std.mem.copy(u8, &buf, init);
-        try nthperm(&buf, @intCast(u6, i));
-        try std.testing.expectEqualStrings(expected, &buf);
+        for (expecteds) |expected, i| {
+            std.mem.copy(u8, &buf, init);
+            try nthperm(&buf, @intCast(u6, i));
+            try std.testing.expectEqualStrings(expected, &buf);
+        }
+
+        // n > (1 << buf.len) should error
+        try std.testing.expectError(
+            error.ArgumentBounds,
+            nthperm(&buf, std.math.maxInt(u6)),
+        );
     }
 
-    // n > (1 << buf.len) should error
-    try std.testing.expectError(
-        error.ArgumentBounds,
-        nthperm(&buf, std.math.maxInt(u6)),
-    );
+    {
+        const init = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi";
+        try std.testing.expectEqual(35, init.len);
+        var buf = init.*;
+        try std.testing.expectError(error.OutOfBoundsAccess, nthperm(&buf, 1));
+        // std.debug.print("init len {}\n", .{init.len});
+        try nthperm(buf[0 .. buf.len - 1], 1 << init.len * 2);
+    }
 }
 
 /// for sets of any size
