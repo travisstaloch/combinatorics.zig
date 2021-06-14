@@ -4,8 +4,11 @@ const std = @import("std");
 /// This iterator produces a binary representation of which k elements are chosen
 /// calling `next()` on `NChooseK(u8).init(3,2)` will produce {0b011, 0b101, 0b110, null}
 pub fn NChooseK(comptime T: type) type {
+    // this method is known as 'Gosper's Hack': http://programmingforinsomniacs.blogspot.com/2018/03/
     return struct {
+        /// n: total number of elements in set
         n: TLog2,
+        /// k: number of elements to choose (number of set bits at any point after calling `next()`)
         k: TLog2,
         set: T,
         limit: T,
@@ -14,8 +17,6 @@ pub fn NChooseK(comptime T: type) type {
         const TSigned = std.meta.Int(.signed, @typeInfo(T).Int.bits);
         const TLog2 = std.math.Log2Int(T);
 
-        /// n: total number of elements in set
-        /// k: number of elements to choose (number of set bits at any point after calling `next()`)
         pub fn init(n: TLog2, k: TLog2) !Self {
             if (n == 0 or k > n) return error.ArgumentBounds;
             return Self{
@@ -32,6 +33,7 @@ pub fn NChooseK(comptime T: type) type {
             // prevent overflow when converting to signed
             if (self.set >= std.math.maxInt(TSigned)) return null;
             // compute next set value
+            // c is equal to the rightmost 1-bit in set.
             const c = self.set & @bitCast(T, -@bitCast(TSigned, self.set));
             if (c == 0) return null;
             const r = self.set + c;
@@ -74,4 +76,121 @@ test "edge cases" {
             try std.testing.expect(@popCount(T, x) == 1);
         }
     }
+}
+
+const bigint = std.math.big.int;
+
+pub const NChooseKBig = struct {
+    /// n: total number of elements in set
+    n: usize,
+    /// k: number of elements to choose (number of set bits at any point after calling `next()`)
+    k: usize,
+    set: bigint.Managed,
+    limit: bigint.Managed,
+
+    pub fn init(allocator: *std.mem.Allocator, n: usize, k: usize) !NChooseKBig {
+        if (n == 0 or k > n) return error.ArgumentBounds;
+        // set = 1 <<  k - 1;
+        var set = try bigint.Managed.initSet(allocator, 1);
+        try set.shiftLeft(set, k);
+        try set.addScalar(set.toConst(), -1);
+
+        // limit = 1 <<  n;
+        var limit = try bigint.Managed.initSet(allocator, 1);
+        try limit.shiftLeft(limit, n);
+        return NChooseKBig{
+            .k = k,
+            .n = n,
+            .set = set,
+            .limit = limit,
+        };
+    }
+
+    pub fn deinit(self: *NChooseKBig) void {
+        self.set.deinit();
+        self.limit.deinit();
+    }
+
+    pub fn next(self: *NChooseKBig) !?bigint.Managed {
+        // TODO: figure out how to eliminate some allocations
+
+        // save for return at end the set at this point otherwise initial set is skipped
+        var result = try self.set.clone();
+        // int c = set & -set; // c is equal to the rightmost 1-bit in set.
+        var c = try self.set.clone();
+        defer c.deinit();
+        for (c.limbs[0..c.len()]) |limb, i| {
+            const x = limb & @bitCast(usize, -@bitCast(isize, limb));
+            if (x > 0) {
+                try c.set(0);
+                c.limbs[i] = x;
+                c.setLen(i + 1);
+                break;
+            }
+        }
+
+        try c.bitAnd(self.set, c);
+
+        if (c.eqZero()) {
+            result.deinit();
+            return null;
+        }
+        // const r = self.set + c;
+        // Find the rightmost 1-bit that can be moved left into a 0-bit. Move it left one.
+        var r = try bigint.Managed.init(self.set.allocator);
+        defer r.deinit();
+        try r.add(self.set.toConst(), c.toConst());
+        // set = (((r ^ set) >> 2) / c) | r;
+        var tmp = try bigint.Managed.init(self.set.allocator);
+        defer tmp.deinit();
+        // Xor’ng r and set returns a cluster of 1-bits representing the bits that were changed between set and r
+        try tmp.bitXor(r, self.set);
+        try tmp.shiftRight(tmp, 2);
+        var rem = try bigint.Managed.init(self.set.allocator);
+        defer rem.deinit();
+        // work around for result location bug (i think?) make a copy of tmp
+        // WARNING: do not remove tmp2. strange things will happen.  the following division will produce
+        // something very strange, 101010.... when dividing 111111... by 1.  possibly garbage.
+        var tmp2 = try tmp.clone();
+        defer tmp2.deinit();
+        try tmp.divFloor(&rem, tmp2.toConst(), c.toConst());
+        try self.set.bitOr(tmp, r);
+        const order = result.order(self.limit);
+
+        return if (order == .gt or order == .eq) blk: {
+            result.deinit();
+            break :blk null;
+        } else result;
+    }
+};
+
+test "basic big" {
+    const expecteds_bycount = [_][]const usize{
+        &.{ 0b01, 0b10 }, // n,k: 2,1
+        &.{ 0b011, 0b101, 0b110 }, // 3,2
+        &.{ 0b0111, 0b1011, 0b1101, 0b1110 }, // 4,3
+        &.{ 0b01111, 0b10111, 0b11011, 0b11101, 0b11110 }, // 5,4
+        &.{ 0b011111, 0b101111, 0b110111, 0b111011, 0b111101, 0b111110 }, // 6,5
+    };
+    for (expecteds_bycount) |expecteds, count| {
+        var it = try NChooseKBig.init(std.testing.allocator, count + 2, count + 1);
+        defer it.deinit();
+        for (expecteds) |expected, i| {
+            var actual = (try it.next()).?;
+            defer actual.deinit();
+            try std.testing.expectEqual(expected, try actual.to(usize));
+        }
+        try std.testing.expectEqual(@as(?bigint.Managed, null), try it.next());
+    }
+}
+
+test "256" {
+    const count = 256;
+    var it = try NChooseKBig.init(std.testing.allocator, count, count - 1);
+    defer it.deinit();
+    var i: usize = 0;
+    while (try it.next()) |*n| : (i += 1) {
+        n.deinit();
+    }
+    try std.testing.expectEqual(@as(usize, count), i);
 }
