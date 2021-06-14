@@ -1,6 +1,8 @@
 const std = @import("std");
 
-const nck = @import("misc.zig").NChooseK;
+const misc = @import("misc.zig");
+const NChooseK = misc.NChooseK;
+const NChooseKBig = misc.NChooseKBig;
 
 // TODO: benchmark this against previous version from 78b055
 pub fn Combinations(comptime Element: type, comptime Set: type) type {
@@ -9,7 +11,7 @@ pub fn Combinations(comptime Element: type, comptime Set: type) type {
         initial_state: []const Element,
         buf: []Element,
         const Self = @This();
-        const Nck = nck(Set);
+        const Nck = NChooseK(Set);
         const SetLog2 = std.math.Log2Int(Set);
 
         pub fn init(initial_state: []const Element, buf: []u8, k: SetLog2) !Self {
@@ -114,5 +116,117 @@ test "set size 127" {
             &buf,
             initial_state_large.len - 1,
         ));
+    }
+}
+
+pub fn CombinationsBig(comptime Element: type) type {
+    return struct {
+        nck: Nck,
+        initial_state: []const Element,
+        buf: []Element,
+        const Self = @This();
+        const Nck = NChooseKBig;
+
+        pub fn init(allocator: *std.mem.Allocator, initial_state: []const Element, buf: []u8, k: usize) !Self {
+            if (k > initial_state.len or k > buf.len or initial_state.len > std.math.maxInt(usize)) return error.ArgumentBounds;
+            return Self{
+                .nck = try Nck.init(allocator, initial_state.len, k),
+                .initial_state = initial_state,
+                .buf = buf,
+            };
+        }
+
+        fn next(self: *Self) !?[]Element {
+            return if (try self.nck.next()) |*bits| blk: {
+                defer bits.deinit();
+                std.mem.copy(Element, self.buf, self.initial_state[0..self.nck.k]);
+                var i: usize = 0;
+                while (i < self.nck.k) : (i += 1) {
+                    var idx: usize = 0;
+                    for (bits.limbs[0..bits.len()]) |limb| {
+                        idx += @ctz(usize, limb);
+                        if (limb != 0) break;
+                    }
+
+                    // bits &= ~(1 << idx);
+                    // unset bit at idx
+
+                    const limb_idx = idx / 64;
+                    const limb_offset = idx % 64;
+                    bits.limbs[limb_idx] &= ~(@as(usize, 1) << @intCast(u6, limb_offset));
+                    self.buf[i] = self.initial_state[idx];
+                }
+                break :blk self.buf[0..self.nck.k];
+            } else null;
+        }
+    };
+}
+
+test "big iterate" {
+    for (expecteds_by_len) |expectedslen, len| {
+        const initial_state = "ABCA";
+        var buf = initial_state.*;
+        var it = try CombinationsBig(u8).init(std.testing.allocator, initial_state, &buf, len + 1);
+        defer it.nck.deinit();
+
+        for (expectedslen) |expected| {
+            var actual = (try it.next()).?;
+            try std.testing.expectEqualStrings(expected, actual);
+        }
+    }
+}
+
+test "big set size 127" {
+    // make sure all combos match normal Combinations iterator
+    const initial_state_big = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" ++
+        "a".* ** 23;
+    try std.testing.expectEqual(127, initial_state_big.len);
+    {
+        var buf = initial_state_big.*;
+        var buf2 = initial_state_big.*;
+        var it = try CombinationsBig(u8).init(std.testing.allocator, initial_state_big, &buf, initial_state_big.len - 1);
+        var it2 = try Combinations(u8, u128).init(initial_state_big, &buf2, initial_state_big.len - 1);
+        defer it.nck.deinit();
+        while (try it.next()) |actual| {
+            const expected = it2.next().?;
+            try std.testing.expectEqualStrings(expected, actual);
+        }
+    }
+}
+
+test "big set size 256" {
+    const initial_state_big = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" ** 2 ++
+        "a".* ** 48;
+    try std.testing.expectEqual(256, initial_state_big.len);
+    {
+        var buf = initial_state_big.*;
+        var it = try CombinationsBig(u8).init(std.testing.allocator, initial_state_big, &buf, initial_state_big.len - 1);
+        defer it.nck.deinit();
+        var i: usize = 0;
+        while (try it.next()) |actual| : (i += 1) {}
+    }
+}
+
+test "big set size 256 choose 4" {
+    const expecteds: []const []const u8 = &.{
+        &.{ 0, 1, 2, 3 },
+        &.{ 0, 1, 2, 4 },
+        &.{ 0, 1, 3, 4 },
+        &.{ 0, 2, 3, 4 },
+        &.{ 1, 2, 3, 4 },
+        &.{ 0, 1, 2, 5 },
+        &.{ 0, 1, 3, 5 },
+        &.{ 0, 2, 3, 5 },
+        &.{ 1, 2, 3, 5 },
+        &.{ 0, 1, 4, 5 },
+    };
+    var xs: [256]u8 = undefined;
+    var buf: [4]u8 = undefined;
+    for (xs) |*x, i| x.* = @intCast(u8, i); // xs == 0..255
+    var it = try CombinationsBig(u8).init(std.testing.allocator, &xs, &buf, 4);
+    defer it.nck.deinit();
+    for (expecteds) |expected| {
+        const actual = (try it.next()).?;
+        try std.testing.expectEqualSlices(u8, expected, actual);
     }
 }

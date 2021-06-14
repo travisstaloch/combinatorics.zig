@@ -45,4 +45,4 @@ look at the tests in [permutations.zig](src/permutations.zig), [combinations.zig
 - export a c api
 - support larger sets by using big integers
   - [x] nthpermBig and PermutationsBig
-  - [] CombinationsBig
+  - [x] NChooseKBig and CombinationsBig
