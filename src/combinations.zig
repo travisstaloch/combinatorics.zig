@@ -204,29 +204,36 @@ test "big set size 256" {
         defer it.nck.deinit();
         var i: usize = 0;
         while (try it.next()) |actual| : (i += 1) {}
+        try std.testing.expectEqual(@as(usize, 256), i);
     }
 }
 
-test "big set size 256 choose 4" {
+test "big set size 256 choose 2" {
     const expecteds: []const []const u8 = &.{
-        &.{ 0, 1, 2, 3 },
-        &.{ 0, 1, 2, 4 },
-        &.{ 0, 1, 3, 4 },
-        &.{ 0, 2, 3, 4 },
-        &.{ 1, 2, 3, 4 },
-        &.{ 0, 1, 2, 5 },
-        &.{ 0, 1, 3, 5 },
-        &.{ 0, 2, 3, 5 },
-        &.{ 1, 2, 3, 5 },
-        &.{ 0, 1, 4, 5 },
+        &.{ 0, 1 },
+        &.{ 0, 2 },
+        &.{ 1, 2 },
+        &.{ 0, 3 },
+        &.{ 1, 3 },
+        &.{ 2, 3 },
+        &.{ 0, 4 },
+        &.{ 1, 4 },
+        &.{ 2, 4 },
+        &.{ 3, 4 },
     };
     var xs: [256]u8 = undefined;
-    var buf: [4]u8 = undefined;
+    const k = 2;
+    var buf: [k]u8 = undefined;
     for (xs) |*x, i| x.* = @intCast(u8, i); // xs == 0..255
-    var it = try CombinationsBig(u8).init(std.testing.allocator, &xs, &buf, 4);
+    var it = try CombinationsBig(u8).init(std.testing.allocator, &xs, &buf, k);
     defer it.nck.deinit();
+    var i: usize = 0;
     for (expecteds) |expected| {
         const actual = (try it.next()).?;
         try std.testing.expectEqualSlices(u8, expected, actual);
+        i += 1;
     }
+    while (try it.next()) |_| : (i += 1) {}
+    // binomial(256,2 ) == 32640
+    try std.testing.expectEqual(@as(usize, 32640), i);
 }

@@ -120,7 +120,13 @@ pub const NChooseKBig = struct {
         var c = try self.set.clone();
         defer c.deinit();
         for (c.limbs[0..c.len()]) |limb, i| {
-            const x = limb & @bitCast(usize, -@bitCast(isize, limb));
+            // prevent overflow here. 1 << 63 is std.math.maxInt(isize) + 1.
+            // if we try to negate this value, overflow will happen.
+            // in this case we know the leftmost 1-bit is just 1 << 63
+            const x = if (limb == 1 << 63)
+                1 << 63
+            else
+                limb & @bitCast(usize, -@bitCast(isize, limb));
             if (x > 0) {
                 try c.set(0);
                 c.limbs[i] = x;
@@ -131,10 +137,13 @@ pub const NChooseKBig = struct {
 
         try c.bitAnd(self.set, c);
 
-        if (c.eqZero()) {
-            result.deinit();
-            return null;
-        }
+        // this check for c == 0 may not be necessary.
+        // going to leave this here commented out incase of future problems.
+        // if (c.eqZero()) {
+        //     result.deinit();
+        //     return null;
+        // }
+
         // const r = self.set + c;
         // Find the rightmost 1-bit that can be moved left into a 0-bit. Move it left one.
         var r = try bigint.Managed.init(self.set.allocator);
@@ -147,6 +156,8 @@ pub const NChooseKBig = struct {
         try tmp.bitXor(r, self.set);
         try tmp.shiftRight(tmp, 2);
         var rem = try bigint.Managed.init(self.set.allocator);
+        // rem must be able to hold this many limbs or else divFloor below may fail
+        try rem.ensureCapacity(tmp.len() + 1);
         defer rem.deinit();
         // work around for result location bug (i think?) make a copy of tmp
         // WARNING: do not remove tmp2. strange things will happen.  the following division will produce
