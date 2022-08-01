@@ -4,7 +4,7 @@ An incomplete port of Julia's [combinatorics library](https://github.com/JuliaMa
 
 __WARNING__ This library is very immature, untested and may have bugs.  Use at your own risk.
 
-This library provides itertors over set permutations and combinations.  It also provides an [`NChooseK`](src/misc.zig) iterator.  `Combination` set sizes are limited to 127.  `Permutations` and `nthperm` set sizes are limited to 34.  For larger set sizes use `nthpermBig` and `PermutationsBig`.  
+This library provides itertors over set permutations and combinations.  It also provides an [`NChooseK`](src/misc.zig) iterator.  `Combination` set sizes are limited to 127.  `Permutations` and `nthperm` set sizes are limited to 34.  For larger set sizes use `nthpermBig`, `PermutationsBig`, `NChooseKBig` and `CombinationsBig`.  
 
 
 # usage
