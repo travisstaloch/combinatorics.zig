@@ -54,7 +54,7 @@ test "basic" {
     for (expecteds_bycount) |expecteds, count_| {
         const count = @intCast(u6, count_);
         var it = try NChooseK(usize).init(count + 2, count + 1);
-        for (expecteds) |expected, i| {
+        for (expecteds) |expected| {
             const actual = it.next().?;
             try std.testing.expectEqual(expected, actual);
         }
@@ -88,16 +88,16 @@ pub const NChooseKBig = struct {
     set: bigint.Managed,
     limit: bigint.Managed,
 
-    pub fn init(allocator: *std.mem.Allocator, n: usize, k: usize) !NChooseKBig {
+    pub fn init(allocator: std.mem.Allocator, n: usize, k: usize) !NChooseKBig {
         if (n == 0 or k > n) return error.ArgumentBounds;
         // set = 1 <<  k - 1;
         var set = try bigint.Managed.initSet(allocator, 1);
-        try set.shiftLeft(set, k);
-        try set.addScalar(set.toConst(), -1);
+        try set.shiftLeft(&set, k);
+        try set.addScalar(&set, -1);
 
         // limit = 1 <<  n;
         var limit = try bigint.Managed.initSet(allocator, 1);
-        try limit.shiftLeft(limit, n);
+        try limit.shiftLeft(&limit, n);
         return NChooseKBig{
             .k = k,
             .n = n,
@@ -111,11 +111,11 @@ pub const NChooseKBig = struct {
         self.limit.deinit();
     }
 
-    pub fn next(self: *NChooseKBig) !?bigint.Managed {
+    pub fn next(self: *NChooseKBig, result: *bigint.Managed) !?void {
         // TODO: figure out how to eliminate some allocations
 
         // save for return at end the set at this point otherwise initial set is skipped
-        var result = try self.set.clone();
+        result.* = try self.set.clone();
         // int c = set & -set; // c is equal to the rightmost 1-bit in set.
         var c = try self.set.clone();
         defer c.deinit();
@@ -135,7 +135,7 @@ pub const NChooseKBig = struct {
             }
         }
 
-        try c.bitAnd(self.set, c);
+        try c.bitAnd(&self.set, &c);
 
         // this check for c == 0 may not be necessary.
         // going to leave this here commented out incase of future problems.
@@ -148,13 +148,13 @@ pub const NChooseKBig = struct {
         // Find the rightmost 1-bit that can be moved left into a 0-bit. Move it left one.
         var r = try bigint.Managed.init(self.set.allocator);
         defer r.deinit();
-        try r.add(self.set.toConst(), c.toConst());
+        try r.add(&self.set, &c);
         // set = (((r ^ set) >> 2) / c) | r;
         var tmp = try bigint.Managed.init(self.set.allocator);
         defer tmp.deinit();
         // Xor’ng r and set returns a cluster of 1-bits representing the bits that were changed between set and r
-        try tmp.bitXor(r, self.set);
-        try tmp.shiftRight(tmp, 2);
+        try tmp.bitXor(&r, &self.set);
+        try tmp.shiftRight(&tmp, 2);
         var rem = try bigint.Managed.init(self.set.allocator);
         // rem must be able to hold this many limbs or else divFloor below may fail
         try rem.ensureCapacity(tmp.len() + 1);
@@ -164,14 +164,14 @@ pub const NChooseKBig = struct {
         // something very strange, 101010.... when dividing 111111... by 1.  possibly garbage.
         var tmp2 = try tmp.clone();
         defer tmp2.deinit();
-        try tmp.divFloor(&rem, tmp2.toConst(), c.toConst());
-        try self.set.bitOr(tmp, r);
+        try tmp.divFloor(&rem, &tmp2, &c);
+        try self.set.bitOr(&tmp, &r);
         const order = result.order(self.limit);
 
-        return if (order == .gt or order == .eq) blk: {
+        if (order == .gt or order == .eq) {
             result.deinit();
-            break :blk null;
-        } else result;
+            return null;
+        }
     }
 };
 
@@ -186,12 +186,15 @@ test "basic big" {
     for (expecteds_bycount) |expecteds, count| {
         var it = try NChooseKBig.init(std.testing.allocator, count + 2, count + 1);
         defer it.deinit();
-        for (expecteds) |expected, i| {
-            var actual = (try it.next()).?;
+        for (expecteds) |expected| {
+            var actual: bigint.Managed = undefined;
+            _ = (try it.next(&actual)).?;
             defer actual.deinit();
+
             try std.testing.expectEqual(expected, try actual.to(usize));
         }
-        try std.testing.expectEqual(@as(?bigint.Managed, null), try it.next());
+        var dummy: bigint.Managed = undefined;
+        try std.testing.expectEqual(@as(?void, null), try it.next(&dummy));
     }
 }
 
@@ -200,8 +203,20 @@ test "256" {
     var it = try NChooseKBig.init(std.testing.allocator, count, count - 1);
     defer it.deinit();
     var i: usize = 0;
-    while (try it.next()) |*n| : (i += 1) {
+    var n: bigint.Managed = undefined;
+    while (try it.next(&n)) |_| : (i += 1) {
         n.deinit();
     }
     try std.testing.expectEqual(@as(usize, count), i);
 }
+
+pub const Error = error{ OutOfBoundsAccess, ArgumentBounds, NTooBig } ||
+    std.math.big.int.Managed.ConvertError;
+
+// fn bench_NChooseKBig(allr: std.mem.Allocator) Ca.BenchmarkError(Error)!void {
+//     return error.NotImplemented;
+// }
+
+// test "bench NChooseKBig" {
+//     try Ca.benchmark(Error, bench_NChooseKBig, .us, std.debug.print);
+// }

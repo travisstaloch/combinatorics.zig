@@ -6,7 +6,7 @@ const fact_table_size_128 = 35;
 const fact_table_size_64 = 21;
 
 const fact_table64 =
-    comptime blk: {
+    blk: {
     var tbl64: [fact_table_size_64]u64 = undefined;
     tbl64[0] = 1;
     var n: u64 = 1;
@@ -17,7 +17,7 @@ const fact_table64 =
 };
 
 const fact_table128 =
-    comptime blk: {
+    blk: {
     var tbl128: [fact_table_size_128]u128 = undefined;
     tbl128[0] = 1;
     var n: u128 = 1;
@@ -40,7 +40,7 @@ fn factorial(comptime T: type, n: anytype) !T {
     };
 }
 
-fn factorialBig(n: anytype, allocator: *std.mem.Allocator) !bigint.Managed {
+fn factorialBig(n: anytype, allocator: std.mem.Allocator) !bigint.Managed {
     if (n > std.math.maxInt(usize)) return error.NTooBig;
 
     var result = try bigint.Managed.init(allocator);
@@ -55,7 +55,7 @@ fn factorialBig(n: anytype, allocator: *std.mem.Allocator) !bigint.Managed {
         while (index >= fact_table_size_128) : (index -= 1) {
             try a.set(index);
             try result.ensureMulCapacity(a.toConst(), result.toConst());
-            try result.mul(a.toConst(), result.toConst());
+            try result.mul(&a, &result);
         }
     }
     return result;
@@ -129,6 +129,22 @@ test "factorialBig" {
         }
     }
 }
+
+// fn bench_factorialBig(allr: std.mem.Allocator) Ca.BenchmarkError(Error)!void {
+//     var f = try factorialBig(55, allr);
+//     defer f.deinit();
+//     var expected = try bigint.Managed.initSet(
+//         allr,
+//         12696403353658275925965100847566516959580321051449436762275840000000000000,
+//     );
+//     defer expected.deinit();
+//     const order = f.order(expected);
+//     try std.testing.expect(order == .eq);
+// }
+
+// test "bench factorialBig" {
+//     try Ca.benchmark(Error, bench_factorialBig, .us, std.debug.print);
+// }
 
 /// for sets of length 35 and less
 pub fn nthperm(a: anytype, n: u128) !void {
@@ -210,11 +226,10 @@ test "nthperm" {
 }
 
 /// for sets of any size
-pub fn nthpermBig(a: anytype, n: usize, allocator: *std.mem.Allocator) !void {
+pub fn nthpermBig(a: anytype, n: usize, allocator: std.mem.Allocator) !void {
     if (a.len == 0) return;
 
     var f = try factorialBig(a.len, allocator);
-
     var temp = try bigint.Managed.initSet(allocator, n);
     defer {
         f.deinit();
@@ -222,29 +237,30 @@ pub fn nthpermBig(a: anytype, n: usize, allocator: *std.mem.Allocator) !void {
     }
     if (f.toConst().order(temp.toConst()) != .gt) return error.ArgumentBounds;
 
-    var i: usize = 0;
-
     var nmut = try bigint.Managed.initSet(allocator, n);
     var j = try bigint.Managed.init(allocator);
     defer {
         nmut.deinit();
         j.deinit();
     }
+    var i: usize = 0;
     while (i < a.len) : (i += 1) {
         // f = f / (a.len - i);
         try temp.set(a.len - i);
-        try f.divTrunc(&temp, f.toConst(), temp.toConst());
+        try f.divTrunc(&temp, &f, &temp);
         // var j = nmut / f;
-        try j.divTrunc(&temp, nmut.toConst(), f.toConst());
+        if (f.eqZero()) break;
+        // std.log.debug("f {}", .{f});
+        try j.divTrunc(&temp, &nmut, &f);
 
         // nmut -= j * f;
         try temp.set(try j.to(usize));
         try temp.ensureMulCapacity(temp.toConst(), f.toConst());
-        try temp.mul(temp.toConst(), f.toConst());
-        try nmut.sub(nmut.toConst(), temp.toConst());
+        try temp.mul(&temp, &f);
+        try nmut.sub(&nmut, &temp);
         // j += i;
         try temp.set(i);
-        try j.add(j.toConst(), temp.toConst());
+        try j.add(&j, &temp);
         const jidx = try j.to(usize);
         if (jidx >= a.len) return error.OutOfBoundsAccess;
         const elt = a[jidx];
@@ -269,6 +285,20 @@ test "nthpermBig" {
         nthpermBig(buf[0..10], std.math.maxInt(usize), std.testing.allocator),
     );
 }
+
+// pub const Error = error{ OutOfBoundsAccess, ArgumentBounds, NTooBig } ||
+//     std.math.big.int.Managed.ConvertError;
+// const Ca = @import("CountingAllocator.zig");
+
+// fn bench_nthpermBig(allr: std.mem.Allocator) Ca.BenchmarkError(Error)!void {
+//     var xs: [256]u8 = undefined;
+//     for (xs) |*x, i| x.* = @intCast(u8, i); // xs == 0..255
+//     try nthpermBig(&xs, std.math.maxInt(usize) - 1, allr);
+// }
+
+// test "nthpermBig bench" {
+//     try Ca.benchmark(Error, bench_nthpermBig, .us, std.debug.print);
+// }
 
 /// for sets of length 35 and less
 pub fn Permutations(comptime T: type) type {
@@ -303,16 +333,16 @@ test "Permutations iterator" {
     }
 }
 
-/// for sets of any size, 
+/// for sets of any size,
 pub fn PermutationsBig(comptime T: type) type {
     return struct {
         i: usize,
         initial_state: []const u8,
         buf: []T,
-        allocator: *std.mem.Allocator,
+        allocator: std.mem.Allocator,
         const Self = @This();
 
-        pub fn init(initial_state: []const T, buf: []T, allocator: *std.mem.Allocator) Self {
+        pub fn init(initial_state: []const T, buf: []T, allocator: std.mem.Allocator) Self {
             return .{ .i = 0, .initial_state = initial_state, .buf = buf, .allocator = allocator };
         }
 

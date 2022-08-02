@@ -106,7 +106,7 @@ test "set size 127" {
     {
         var buf = initial_state_large.*;
         var it = try Combinations(u8, u128).init(initial_state_large, &buf, initial_state_large.len - 1);
-        while (it.next()) |c| {}
+        while (it.next()) |_| {}
     }
     {
         const init_too_large = initial_state_large ++ "a";
@@ -127,7 +127,7 @@ pub fn CombinationsBig(comptime Element: type) type {
         const Self = @This();
         const Nck = NChooseKBig;
 
-        pub fn init(allocator: *std.mem.Allocator, initial_state: []const Element, buf: []u8, k: usize) !Self {
+        pub fn init(allocator: std.mem.Allocator, initial_state: []const Element, buf: []u8, k: usize) !Self {
             if (k > initial_state.len or k > buf.len or initial_state.len > std.math.maxInt(usize)) return error.ArgumentBounds;
             return Self{
                 .nck = try Nck.init(allocator, initial_state.len, k),
@@ -137,7 +137,8 @@ pub fn CombinationsBig(comptime Element: type) type {
         }
 
         fn next(self: *Self) !?[]Element {
-            return if (try self.nck.next()) |*bits| blk: {
+            var bits: std.math.big.int.Managed = undefined;
+            return if (try self.nck.next(&bits)) |_| blk: {
                 defer bits.deinit();
                 std.mem.copy(Element, self.buf, self.initial_state[0..self.nck.k]);
                 var i: usize = 0;
@@ -203,7 +204,7 @@ test "big set size 256" {
         var it = try CombinationsBig(u8).init(std.testing.allocator, initial_state_big, &buf, initial_state_big.len - 1);
         defer it.nck.deinit();
         var i: usize = 0;
-        while (try it.next()) |actual| : (i += 1) {}
+        while (try it.next()) |_| : (i += 1) {}
         try std.testing.expectEqual(@as(usize, 256), i);
     }
 }
