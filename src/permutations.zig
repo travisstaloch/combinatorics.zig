@@ -7,32 +7,32 @@ const fact_table_size_64 = 21;
 
 const fact_table64 =
     blk: {
-    var tbl64: [fact_table_size_64]u64 = undefined;
-    tbl64[0] = 1;
-    var n: u64 = 1;
-    while (n < fact_table_size_64) : (n += 1) {
-        tbl64[n] = tbl64[n - 1] * n;
-    }
-    break :blk tbl64;
-};
+        var tbl64: [fact_table_size_64]u64 = undefined;
+        tbl64[0] = 1;
+        var n: u64 = 1;
+        while (n < fact_table_size_64) : (n += 1) {
+            tbl64[n] = tbl64[n - 1] * n;
+        }
+        break :blk tbl64;
+    };
 
 const fact_table128 =
     blk: {
-    var tbl128: [fact_table_size_128]u128 = undefined;
-    tbl128[0] = 1;
-    var n: u128 = 1;
-    while (n < fact_table_size_128) : (n += 1) {
-        tbl128[n] = tbl128[n - 1] * n;
-    }
-    break :blk tbl128;
-};
+        var tbl128: [fact_table_size_128]u128 = undefined;
+        tbl128[0] = 1;
+        var n: u128 = 1;
+        while (n < fact_table_size_128) : (n += 1) {
+            tbl128[n] = tbl128[n - 1] * n;
+        }
+        break :blk tbl128;
+    };
 
 fn factorial(comptime T: type, n: anytype) !T {
     const TI = @typeInfo(T);
     return try switch (TI) {
-        .Int => if (TI.Int.bits <= 64)
+        .int => if (TI.int.bits <= 64)
             factorialLookup(T, n, fact_table64, fact_table_size_64)
-        else if (TI.Int.bits <= 128)
+        else if (TI.int.bits <= 128)
             factorialLookup(T, n, fact_table128, fact_table_size_128)
         else
             @compileError("factorial not implemented for integer type " ++ @typeName(T)),
@@ -65,10 +65,8 @@ fn factorialLookup(comptime T: type, n: anytype, table: anytype, limit: anytype)
     if (n < 0) return error.Domain;
     if (n > limit) return error.Overflow;
     if (n >= table.len) return error.OutOfBoundsAccess;
-    const TI = @typeInfo(T);
-    const TUnsigned = std.meta.Int(.unsigned, std.math.min(TI.Int.bits, 64));
-    const f = table[@intCast(TUnsigned, n)];
-    return @intCast(T, f);
+    const f = table[@intCast(n)];
+    return @intCast(f);
 }
 
 test "factorial" {
@@ -99,7 +97,7 @@ test "factorialBig" {
     {
         var f = try factorialBig(34, std.testing.allocator);
         defer f.deinit();
-        try std.testing.expectEqual(fact_table128[fact_table_size_128 - 1], try f.to(u128));
+        try std.testing.expectEqual(fact_table128[fact_table_size_128 - 1], try f.toInt(u128));
     }
 
     // beyond table
@@ -125,7 +123,7 @@ test "factorialBig" {
             defer f.deinit();
             var expected = try bigint.Managed.initSet(std.testing.allocator, EXPECTED);
             defer expected.deinit();
-            try std.testing.expect(expected.toConst().eq(f.toConst()));
+            try std.testing.expect(expected.toConst().eql(f.toConst()));
         }
     }
 }
@@ -160,7 +158,7 @@ pub fn nthperm(a: anytype, n: u128) !void {
         var j = nmut / f;
         nmut -= j * f;
         j += i;
-        const jidx = @intCast(usize, j);
+        const jidx: usize = @intCast(j);
         if (jidx >= a.len) return error.OutOfBoundsAccess;
         const elt = a[jidx];
         var d = jidx;
@@ -202,9 +200,9 @@ test "nthperm" {
         const init = "ABCA";
         var buf = init.*;
 
-        for (expecteds) |expected, i| {
-            std.mem.copy(u8, &buf, init);
-            try nthperm(&buf, @intCast(u6, i));
+        for (expecteds, 0..) |expected, i| {
+            @memcpy(&buf, init);
+            try nthperm(&buf, @intCast(i));
             try std.testing.expectEqualStrings(expected, &buf);
         }
 
@@ -249,19 +247,19 @@ pub fn nthpermBig(a: anytype, n: usize, allocator: std.mem.Allocator) !void {
         try temp.set(a.len - i);
         try f.divTrunc(&temp, &f, &temp);
         // var j = nmut / f;
-        if (f.eqZero()) break;
+        if (f.eqlZero()) break;
         // std.log.debug("f {}", .{f});
         try j.divTrunc(&temp, &nmut, &f);
 
         // nmut -= j * f;
-        try temp.set(try j.to(usize));
+        try temp.set(try j.toInt(usize));
         try temp.ensureMulCapacity(temp.toConst(), f.toConst());
         try temp.mul(&temp, &f);
         try nmut.sub(&nmut, &temp);
         // j += i;
         try temp.set(i);
         try j.add(&j, &temp);
-        const jidx = try j.to(usize);
+        const jidx = try j.toInt(usize);
         if (jidx >= a.len) return error.OutOfBoundsAccess;
         const elt = a[jidx];
         var d = jidx;
@@ -315,8 +313,8 @@ pub fn Permutations(comptime T: type) type {
         }
 
         pub fn next(self: *Self) ?[]const T {
-            std.mem.copy(u8, self.buf, self.initial_state);
-            nthperm(self.buf, @intCast(u6, self.i)) catch return null;
+            @memcpy(self.buf, self.initial_state);
+            nthperm(self.buf, @intCast(self.i)) catch return null;
             self.i += 1;
             return self.buf;
         }
@@ -347,8 +345,8 @@ pub fn PermutationsBig(comptime T: type) type {
         }
 
         pub fn next(self: *Self) !?[]const T {
-            std.mem.copy(u8, self.buf, self.initial_state);
-            try nthpermBig(self.buf, @intCast(u6, self.i), self.allocator);
+            @memcpy(self.buf, self.initial_state);
+            try nthpermBig(self.buf, @intCast(self.i), self.allocator);
             self.i += 1;
             return self.buf;
         }

@@ -17,7 +17,7 @@ pub fn Combinations(comptime Element: type, comptime Set: type) type {
         pub fn init(initial_state: []const Element, buf: []u8, k: SetLog2) !Self {
             if (k > initial_state.len or k > buf.len or initial_state.len > std.math.maxInt(SetLog2)) return error.ArgumentBounds;
             return Self{
-                .nck = try Nck.init(@intCast(SetLog2, initial_state.len), k),
+                .nck = try Nck.init(@intCast(initial_state.len), k),
                 .initial_state = initial_state,
                 .buf = buf,
             };
@@ -26,14 +26,14 @@ pub fn Combinations(comptime Element: type, comptime Set: type) type {
         fn next(self: *Self) ?[]Element {
             return if (self.nck.next()) |nckbits| blk: {
                 var bits = nckbits;
-                std.mem.copy(Element, self.buf, self.initial_state[0..@intCast(usize, self.nck.k)]);
+                @memcpy(self.buf, self.initial_state[0..@intCast(self.nck.k)]);
                 var i: usize = 0;
                 while (i < self.nck.k) : (i += 1) {
-                    const idx = @ctz(Set, bits);
-                    bits &= ~(@as(Set, 1) << @intCast(SetLog2, idx));
+                    const idx = @ctz(bits);
+                    bits &= ~(@as(Set, 1) << @intCast(idx));
                     self.buf[i] = self.initial_state[idx];
                 }
-                break :blk self.buf[0..@intCast(usize, self.nck.k)];
+                break :blk self.buf[0..@intCast(self.nck.k)];
             } else null;
         }
     };
@@ -47,10 +47,10 @@ const expecteds_by_len: []const []const []const u8 = &.{
 };
 
 test "iterate" {
-    for (expecteds_by_len) |expectedslen, len| {
+    for (expecteds_by_len, 0..) |expectedslen, len| {
         const initial_state = "ABCA";
         var buf = initial_state.*;
-        var it = try Combinations(u8, usize).init(initial_state, &buf, @intCast(u6, len + 1));
+        var it = try Combinations(u8, usize).init(initial_state, &buf, @intCast(len + 1));
 
         for (expectedslen) |expected| {
             const actual = it.next().?;
@@ -140,12 +140,12 @@ pub fn CombinationsBig(comptime Element: type) type {
             var bits: std.math.big.int.Managed = undefined;
             return if (try self.nck.next(&bits)) |_| blk: {
                 defer bits.deinit();
-                std.mem.copy(Element, self.buf, self.initial_state[0..self.nck.k]);
+                @memcpy(self.buf, self.initial_state[0..self.nck.k]);
                 var i: usize = 0;
                 while (i < self.nck.k) : (i += 1) {
                     var idx: usize = 0;
                     for (bits.limbs[0..bits.len()]) |limb| {
-                        idx += @ctz(usize, limb);
+                        idx += @ctz(limb);
                         if (limb != 0) break;
                     }
 
@@ -154,7 +154,7 @@ pub fn CombinationsBig(comptime Element: type) type {
 
                     const limb_idx = idx / 64;
                     const limb_offset = idx % 64;
-                    bits.limbs[limb_idx] &= ~(@as(usize, 1) << @intCast(u6, limb_offset));
+                    bits.limbs[limb_idx] &= ~(@as(usize, 1) << @intCast(limb_offset));
                     self.buf[i] = self.initial_state[idx];
                 }
                 break :blk self.buf[0..self.nck.k];
@@ -164,14 +164,14 @@ pub fn CombinationsBig(comptime Element: type) type {
 }
 
 test "big iterate" {
-    for (expecteds_by_len) |expectedslen, len| {
+    for (expecteds_by_len, 0..) |expectedslen, len| {
         const initial_state = "ABCA";
         var buf = initial_state.*;
         var it = try CombinationsBig(u8).init(std.testing.allocator, initial_state, &buf, len + 1);
         defer it.nck.deinit();
 
         for (expectedslen) |expected| {
-            var actual = (try it.next()).?;
+            const actual = (try it.next()).?;
             try std.testing.expectEqualStrings(expected, actual);
         }
     }
@@ -225,7 +225,7 @@ test "big set size 256 choose 2" {
     var xs: [256]u8 = undefined;
     const k = 2;
     var buf: [k]u8 = undefined;
-    for (xs) |*x, i| x.* = @intCast(u8, i); // xs == 0..255
+    for (&xs, 0..) |*x, i| x.* = @intCast(i); // xs == 0..255
     var it = try CombinationsBig(u8).init(std.testing.allocator, &xs, &buf, k);
     defer it.nck.deinit();
     var i: usize = 0;

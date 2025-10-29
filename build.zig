@@ -1,18 +1,23 @@
 const std = @import("std");
-const pkgs = @import("deps.zig").pkgs;
 
-pub fn build(b: *std.build.Builder) void {
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    const mode = b.standardReleaseOptions();
+pub fn build(b: *std.Build) void {
+    const optimize = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{});
 
-    const lib = b.addStaticLibrary("combinatorics", "src/main.zig");
-    lib.setBuildMode(mode);
-    lib.install();
-    pkgs.addAllTo(lib);
+    const mod = b.addModule("combinatorics", .{
+        .root_source_file = b.path("src/root.zig"),
+        .optimize = optimize,
+        .target = target,
+    });
+    _ = mod; // autofix
 
-    var main_tests = b.addTest("src/main.zig");
-    main_tests.setBuildMode(mode);
+    var main_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .optimize = optimize,
+            .target = target,
+        }),
+    });
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);

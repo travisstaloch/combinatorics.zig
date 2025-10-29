@@ -14,7 +14,7 @@ pub fn NChooseK(comptime T: type) type {
         limit: T,
 
         const Self = @This();
-        const TSigned = std.meta.Int(.signed, @typeInfo(T).Int.bits);
+        const TSigned = std.meta.Int(.signed, @typeInfo(T).int.bits);
         const TLog2 = std.math.Log2Int(T);
 
         pub fn init(n: TLog2, k: TLog2) !Self {
@@ -22,8 +22,8 @@ pub fn NChooseK(comptime T: type) type {
             return Self{
                 .k = k,
                 .n = n,
-                .set = (@as(T, 1) << @intCast(TLog2, k)) - 1,
-                .limit = @as(T, 1) << @intCast(TLog2, n),
+                .set = (@as(T, 1) << @intCast(k)) - 1,
+                .limit = @as(T, 1) << @intCast(n),
             };
         }
 
@@ -34,7 +34,7 @@ pub fn NChooseK(comptime T: type) type {
             if (self.set >= std.math.maxInt(TSigned)) return null;
             // compute next set value
             // c is equal to the rightmost 1-bit in set.
-            const c = self.set & @bitCast(T, -@bitCast(TSigned, self.set));
+            const c = self.set & @as(T, @bitCast(-@as(TSigned, @bitCast(self.set))));
             if (c == 0) return null;
             const r = self.set + c;
             self.set = @divFloor(((r ^ self.set) >> 2), c) | r;
@@ -51,8 +51,8 @@ test "basic" {
         &.{ 0b01111, 0b10111, 0b11011, 0b11101, 0b11110 }, // 5,4
         &.{ 0b011111, 0b101111, 0b110111, 0b111011, 0b111101, 0b111110 }, // 6,5
     };
-    for (expecteds_bycount) |expecteds, count_| {
-        const count = @intCast(u6, count_);
+    for (expecteds_bycount, 0..) |expecteds, count_| {
+        const count: u6 = @intCast(count_);
         var it = try NChooseK(usize).init(count + 2, count + 1);
         for (expecteds) |expected| {
             const actual = it.next().?;
@@ -73,7 +73,7 @@ test "edge cases" {
     inline for (Ts) |T| {
         var it = try NChooseK(T).init(std.math.log2_int(T, std.math.maxInt(T)), 1);
         while (it.next()) |x| {
-            try std.testing.expect(@popCount(T, x) == 1);
+            try std.testing.expect(@popCount(x) == 1);
         }
     }
 }
@@ -119,14 +119,14 @@ pub const NChooseKBig = struct {
         // int c = set & -set; // c is equal to the rightmost 1-bit in set.
         var c = try self.set.clone();
         defer c.deinit();
-        for (c.limbs[0..c.len()]) |limb, i| {
+        for (c.limbs[0..c.len()], 0..) |limb, i| {
             // prevent overflow here. 1 << 63 is std.math.maxInt(isize) + 1.
             // if we try to negate this value, overflow will happen.
             // in this case we know the leftmost 1-bit is just 1 << 63
             const x = if (limb == 1 << 63)
                 1 << 63
             else
-                limb & @bitCast(usize, -@bitCast(isize, limb));
+                limb & @as(usize, @bitCast(-@as(isize, @bitCast(limb))));
             if (x > 0) {
                 try c.set(0);
                 c.limbs[i] = x;
@@ -183,7 +183,7 @@ test "basic big" {
         &.{ 0b01111, 0b10111, 0b11011, 0b11101, 0b11110 }, // 5,4
         &.{ 0b011111, 0b101111, 0b110111, 0b111011, 0b111101, 0b111110 }, // 6,5
     };
-    for (expecteds_bycount) |expecteds, count| {
+    for (expecteds_bycount, 0..) |expecteds, count| {
         var it = try NChooseKBig.init(std.testing.allocator, count + 2, count + 1);
         defer it.deinit();
         for (expecteds) |expected| {
@@ -191,7 +191,7 @@ test "basic big" {
             _ = (try it.next(&actual)).?;
             defer actual.deinit();
 
-            try std.testing.expectEqual(expected, try actual.to(usize));
+            try std.testing.expectEqual(expected, try actual.toInt(usize));
         }
         var dummy: bigint.Managed = undefined;
         try std.testing.expectEqual(@as(?void, null), try it.next(&dummy));

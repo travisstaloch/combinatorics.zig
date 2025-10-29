@@ -1,0 +1,12 @@
+.{
+    .name = .combinatorics,
+    .version = "0.0.1",
+    .fingerprint = 0x3a84e12fd3c3236d,
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE",
+        "README.md",
+    },
+}
