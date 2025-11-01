@@ -302,7 +302,7 @@ test "nthpermBig" {
 pub fn Permutations(comptime T: type) type {
     return struct {
         i: usize,
-        initial_state: []const u8,
+        initial_state: []const T,
         /// must be at least as long as initial state.
         /// initial_state will be copied to this buffer each time next() is called.
         buf: []T,
@@ -313,10 +313,10 @@ pub fn Permutations(comptime T: type) type {
         }
 
         pub fn next(self: *Self) ?[]const T {
-            @memcpy(self.buf, self.initial_state);
-            nthperm(self.buf, @intCast(self.i)) catch return null;
+            @memcpy(self.buf[0..self.initial_state.len], self.initial_state);
+            nthperm(self.buf[0..self.initial_state.len], @intCast(self.i)) catch return null;
             self.i += 1;
-            return self.buf;
+            return self.buf[0..self.initial_state.len];
         }
     };
 }
@@ -335,7 +335,7 @@ test "Permutations iterator" {
 pub fn PermutationsBig(comptime T: type) type {
     return struct {
         i: usize,
-        initial_state: []const u8,
+        initial_state: []const T,
         buf: []T,
         allocator: std.mem.Allocator,
         const Self = @This();
